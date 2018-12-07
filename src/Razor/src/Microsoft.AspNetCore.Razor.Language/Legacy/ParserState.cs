@@ -17,6 +17,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
         RazorComment,
         SpecialTag,
         Tag,
+        TagInCodeBlock,
         Unknown,
         XmlPI,
     }

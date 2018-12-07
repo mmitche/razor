@@ -552,7 +552,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
             return false;
         }
 
-        public MarkupBlockSyntax ParseBlock()
+        public MarkupBlockSyntax ParseBlockLegacy()
         {
             if (Context == null)
             {
@@ -589,12 +589,12 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                     SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
                     var transition = GetNodeWithSpanContext(SyntaxFactory.MarkupTransition(Output()));
                     builder.Add(transition);
-                    if (At(SyntaxKind.Transition))
-                    {
-                        SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
-                        AcceptAndMoveNext();
-                        builder.Add(OutputAsMetaCode(Output(), AcceptedCharactersInternal.Any));
-                    }
+                    //if (At(SyntaxKind.Transition))
+                    //{
+                    //    SpanContext.ChunkGenerator = SpanChunkGenerator.Null;
+                    //    AcceptAndMoveNext();
+                    //    builder.Add(OutputAsMetaCode(Output(), AcceptedCharactersInternal.Any));
+                    //}
                     ParseAfterTransition(builder);
                 }
                 else
