@@ -628,7 +628,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                     Accept(split.Item2);
                 }
                 NextToken();
-                ParseSingleLineMarkup(builder);
+                ParseSingleLineMarkupLegacy(builder);
             }
             else if (CurrentToken.Kind == SyntaxKind.OpenAngle)
             {
@@ -636,7 +636,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
             }
         }
 
-        private void ParseSingleLineMarkup(in SyntaxListBuilder<RazorSyntaxNode> builder)
+        private void ParseSingleLineMarkupLegacy(in SyntaxListBuilder<RazorSyntaxNode> builder)
         {
             // Parse until a newline, it's that simple!
             // First, signal to code parser that whitespace is significant to us.
