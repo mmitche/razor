@@ -552,7 +552,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
             return false;
         }
 
-        public MarkupBlockSyntax ParseBlockLegacy()
+        public MarkupBlockSyntax ParseBlock()
         {
             if (Context == null)
             {

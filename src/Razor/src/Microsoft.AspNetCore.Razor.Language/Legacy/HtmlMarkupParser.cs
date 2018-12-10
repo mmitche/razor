@@ -69,7 +69,7 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
             }
         }
 
-        public MarkupBlockSyntax ParseBlock()
+        public MarkupBlockSyntax ParseBlockNew()
         {
             if (Context == null)
             {
@@ -88,6 +88,9 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                     {
                         return null;
                     }
+
+                    AcceptWhile(IsSpacingToken(includeNewLines: true));
+                    builder.Add(OutputAsMarkupLiteral());
 
                     if (At(SyntaxKind.OpenAngle))
                     {
@@ -203,6 +206,8 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                         break;
                 }
             } while (_tagTracker.Count > 0);
+
+            CompleteMarkupInCodeBlock(builder);
         }
 
         private void CompleteMarkupInCodeBlock(in SyntaxListBuilder<RazorSyntaxNode> builder)
@@ -228,8 +233,42 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
 
             if (!Context.DesignTimeMode)
             {
-                // Do some whitespace handling
+                var shouldAcceptWhitespaceAndNewLine = true;
+
+                // Check if the previous span was a transition.
+                var previousSpan = builder.Count > 0 ? GetLastSpan(builder[builder.Count - 1]) : null;
+                if (previousSpan != null && previousSpan.Kind == SyntaxKind.MarkupTransition)
+                {
+                    var tokens = ReadWhile(
+                        f => (f.Kind == SyntaxKind.Whitespace) || (f.Kind == SyntaxKind.NewLine));
+
+                    // Make sure the current token is not markup, which can be html start tag or @:
+                    if (!(At(SyntaxKind.OpenAngle) ||
+                        (At(SyntaxKind.Transition) && Lookahead(count: 1).Content.StartsWith(":"))))
+                    {
+                        // Don't accept whitespace as markup if the end text tag is followed by csharp.
+                        shouldAcceptWhitespaceAndNewLine = false;
+                    }
+
+                    PutCurrentBack();
+                    PutBack(tokens);
+                    EnsureCurrent();
+                }
+                if (shouldAcceptWhitespaceAndNewLine)
+                {
+                    // Accept whitespace and a single newline if present
+                    AcceptWhile(SyntaxKind.Whitespace);
+                    TryAccept(SyntaxKind.NewLine);
+                }
             }
+            else if (SpanContext.EditHandler.AcceptedCharacters == AcceptedCharactersInternal.Any)
+            {
+                AcceptWhile(SyntaxKind.Whitespace);
+                TryAccept(SyntaxKind.NewLine);
+            }
+            PutCurrentBack();
+
+            builder.Add(OutputAsMarkupLiteral());
         }
 
         private void ParseMarkupTransition(in SyntaxListBuilder<RazorSyntaxNode> builder)
@@ -456,6 +495,14 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                 }
                 TryAccept(SyntaxKind.Text);
 
+                if (mode == ParseMode.MarkupInCodeBlock &&
+                    _tagTracker.Count == 0 &&
+                    string.Equals(tagName, SyntaxConstants.TextTagName, StringComparison.OrdinalIgnoreCase))
+                {
+                    // "<text>" tag is special only if it is the outermost tag.
+                    return ParseStartTextTag(out tagMode);
+                }
+
                 if (At(SyntaxKind.CloseAngle) && mode == ParseMode.MarkupInCodeBlock)
                 {
                     // Completed tags in code blocks have no accepted characters.
@@ -465,7 +512,6 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                 // Output open angle and tag name
                 tagBuilder.Add(OutputAsMarkupLiteral());
 
-
                 // Parse the contents of a tag like attributes.
                 ParseAttributes(tagBuilder);
 
@@ -474,19 +520,27 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
                     // This is a self closing tag.
                     tagMode = MarkupTagMode.SelfClosing;
                 }
-                if (!EndOfFile && !TryAccept(SyntaxKind.CloseAngle) && mode == ParseMode.MarkupInCodeBlock)
+
+                if (mode == ParseMode.MarkupInCodeBlock)
                 {
-                    Context.ErrorSink.OnError(
-                    RazorDiagnosticFactory.CreateParsing_UnfinishedTag(
-                        new SourceSpan(
-                            SourceLocationTracker.Advance(tagStartLocation, "<"),
-                            Math.Max(tagName?.Length ?? 0, 1)),
-                        tagName ?? string.Empty));
+                    if (EndOfFile || !TryAccept(SyntaxKind.CloseAngle))
+                    {
+                        Context.ErrorSink.OnError(
+                            RazorDiagnosticFactory.CreateParsing_UnfinishedTag(
+                                new SourceSpan(
+                                    tagName == null ? tagStartLocation : SourceLocationTracker.Advance(tagStartLocation, "<"),
+                                    Math.Max(tagName?.Length ?? 0, 1)),
+                                tagName ?? string.Empty));
+                    }
+                    else
+                    {
+                        // Completed tags in code blocks have no accepted characters.
+                        SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
+                    }
                 }
-                else if (mode == ParseMode.MarkupInCodeBlock)
+                else
                 {
-                    // Completed tags in code blocks have no accepted characters.
-                    SpanContext.EditHandler.AcceptedCharacters = AcceptedCharactersInternal.None;
+                    TryAccept(SyntaxKind.CloseAngle);
                 }
 
                 // End tag block
@@ -504,6 +558,12 @@ namespace Microsoft.AspNetCore.Razor.Language.Legacy
 
                 return tagBlock;
             }
+        }
+
+        private MarkupStartTagSyntax ParseStartTextTag(out MarkupTagMode tagMode)
+        {
+            tagMode = MarkupTagMode.Normal;
+            return null;
         }
 
         private MarkupEndTagSyntax ParseEndTag(ParseMode mode, out string tagName)
